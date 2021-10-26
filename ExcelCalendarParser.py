@@ -1,18 +1,15 @@
 # This python file will parse the calendar dump excel spreadsheet
 # and produce a text output suitable for editing.
+import datetime
+
 import openpyxl
 import numpy
 import re
 import regex
+from datetime import date
+import calendar
+from DataStructs import LodgeTown, degrees, location_exceptions
 
-LodgeTown = {"Lodge 001 Hiram": "New Haven",
-             "Lodge 002 St. John's" : "Middletown",
-             "Lodge 003 Fidelity-St. John's" : "Fairfield",
-             "Lodge 007 King Solomon's" : "Woodbury",
-             "Lodge 014 Frederick-Franklin" : "Plainville",
-             "Lodge 028 Composite" : "Suffield",
-             "Lodge 040 Union" : "Danbury",
-             "Lodge 067 Harmony" : "Waterbury"}
 
 
 def get_populated_row_count(ws):
@@ -41,7 +38,7 @@ def export_calendar_data():
     # create a list of lists, initialized to -1's, to hold our data when transformed
     full_list_calender_entries = [[-1, -1, -1, -1, -1] for i in range(rows)]
 
-    degrees = []
+#    degrees = []
     locations = ['' for i in range(rows)]
     # Set the ending cell identifier...column "E" with the last populated row number
     end = 'E' + str(rows)
@@ -50,13 +47,15 @@ def export_calendar_data():
     # The first value in the row is the lodge name.  Need to change that from 'Lodge 001 Hiram'
     # to "Hiram Lodge No. 1".
     modify_lodge(table, full_list_calender_entries)
-    modify_event_title(table, full_list_calender_entries, degrees)
+#    modify_event_title(table, full_list_calender_entries, degrees)
     #   modify_event_descr(table, full_list_calendar_entries, degrees)
-    modify_event_location(table, full_list_calender_entries, locations)
+#    modify_event_location(table, full_list_calender_entries, locations)
+    modify_date(table,full_list_calender_entries)
 
     print("\n=-=-=-=-=-=-\n")
     print(full_list_calender_entries)
     print(degrees)
+    return full_list_calender_entries
 
 
 def modify_lodge(table, full_list_calender_entries):
@@ -77,7 +76,7 @@ def modify_lodge(table, full_list_calender_entries):
     print(full_list_calender_entries[array_idx])
     for lodge in lodge_array:
         result = rx.match(lodge)
-        if result is not None:
+        if result:
             #            print(result.group(3) + " " + result.group(1) + " No. " + result.group(2).lstrip("0"))
             lodge_string = result.group(3) + " " + result.group(1) + " No. " + result.group(2).lstrip("0")
             full_list_calender_entries[array_idx][0] = lodge_string
@@ -114,17 +113,8 @@ def modify_event_location(table, full_list_calendar_entries, locations):
     rz = re.compile(r'.*, (.*), (CT).*')
 
 
-    # print("Lodge 007 King Solomon's, Lodge 007 King Solomon's Social Hall")
-    # result = ry.match("Lodge 007 King Solomon's, Lodge 007 King Solomon's Social Hall")
-    # if result is not None:
-    #     print("matched")
-    #     print(result.group(1))
-    #     print(result.group(2))
-
     # loop through the locations.  See what they match, if anything
     for loc in loc_array:
-#        if array_idx != 34:
-#            continue
         if loc is None:
             # there was no location specified in the spreadsheet, so leave it empty in the result
             full_list_calendar_entries[array_idx][3] = ""
@@ -137,14 +127,14 @@ def modify_event_location(table, full_list_calendar_entries, locations):
             if result is not None:
                 print(result.group(1))
                 locations[array_idx] = result.group(2)
-                full_list_calendar_entries[array_idx] = loc
+                full_list_calendar_entries[array_idx][3] = loc
             else:
                 # See if 'CT' is by itself.
                 result2 = rz.match(loc)
                 if result2 is not None:
                     print(result2.group(1))
                     locations[array_idx] = result2.group(1)
-                    full_list_calendar_entries[array_idx] = loc
+                    full_list_calendar_entries[array_idx][3] = loc
                 else:
 
                     # it didn't have 'CT' in the location, so see if it is maybe a Lodge 001 Hiram
@@ -153,16 +143,40 @@ def modify_event_location(table, full_list_calendar_entries, locations):
                     # is a little more flexible)
                     result2 = ry.fullmatch(loc)
                     if result2 is not None:
+                        print(result2)
                         print(LodgeTown[loc])
                         locations[array_idx] = LodgeTown[loc]
-                        full_list_calendar_entries[array_idx] = loc
+                        full_list_calendar_entries[array_idx][3] = loc
                     else:
-                        result2 = ry.match(loc)
+                        result2 = ry.search(loc)
                         if result2:
+                            print(result2)
                             lodge = result2.group(1) + " " + result2.group(2) + " " + result2.group(3)
-                            print(LodgeTown[lodge])
-                            locations[array_idx] = LodgeTown[lodge]
-                            # For now, just jam it in there...maybe we will develop other regexs later
-                            full_list_calendar_entries[array_idx] = loc
+                            if lodge in LodgeTown.keys():
+                                print(LodgeTown[lodge])
+#                                locations[array_idx] = LodgeTown[lodge]
+                                full_list_calendar_entries[array_idx][3] = LodgeTown[lodge]
+                            else:
+                                print("********FUCKED UP********" + loc)
+                                location_exceptions.append(loc)
+                               # For now, just jam it in there...maybe we will develop other regexs later
+                                full_list_calendar_entries[array_idx][3] = loc
         array_idx += 1
         print("@@@@@@@@@@@@@@@@@@@@")
+
+def modify_date(table,full_list_calendar_entries):
+    time_array = [item[4] for item in table]
+    print(time_array)
+    curr_yr = datetime.datetime.today().year;
+
+    array_idx = 0
+    for time in time_array:
+        time_str = time.strftime("%a %b. %-d")
+        if time.year > curr_yr:
+            print(time.year)
+            time_str += ", "
+            time_str += str(time.year)
+        print(time_str)
+        full_list_calendar_entries[array_idx][4] = time_str
+        array_idx += 1
+
