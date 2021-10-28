@@ -16,11 +16,9 @@ from DataStructs import LodgeTown, BadLocations, locations, location_exceptions,
 #
 def get_populated_row_count(ws):
     number_of_rows = ws.max_row
-    last_row_index_with_data = 0
 
     while True:
         if ws.cell(number_of_rows, 1).value is not None:
-            last_row_index_with_data = number_of_rows
             break
         else:
             number_of_rows -= 1
@@ -28,24 +26,19 @@ def get_populated_row_count(ws):
 
 
 def export_calendar_data():
-    print("Here is where we'd start to parse")
-
     # Open the workbook.  There are two worksheets, 'data' and 'calc', we want 'data'
     wb = openpyxl.load_workbook('CalDump1.xlsx')
     ws = wb['data']
 
     # Find out how many rows are populated -- this is different than max rows.
     rows = get_populated_row_count(ws)
-    print("ROWS " + str(rows))
 
     # initialize a list of lists, initialized to -1's, to hold our data when transformed
     # also initialize a list to hold locations when there is some doubt
     for i in range(rows - 1):
         full_list_calendar_entries.insert(i, [-1, -1, -1, -1, -1])
         locations.insert(i, '')
-    print(full_list_calendar_entries)
-    print(locations)
-    print(full_list_calendar_entries[rows-1])
+
     if not full_list_calendar_entries[rows - 1]:
         full_list_calendar_entries.pop(rows - 1)
 
@@ -54,17 +47,15 @@ def export_calendar_data():
     table = numpy.array([[cell.value for cell in col] for col in ws['A2':end]])
 
     # The first value in the row is the lodge name.  Need to change that from 'Lodge 001 Hiram'
-    # to "Hiram Lodge No. 1".
+    # to "Hiram Lodge No. 1".  Run through each column (lodge, event title, event description, location, time)
+    # and extract the data, and modify it, then save it.
     modify_lodge(table)
     modify_event_title(table)
     modify_event_descr(table)
     modify_event_location(table)
     modify_date(table)
 
-    print("\n=-=-=-=-=-=-\n")
-    print(full_list_calendar_entries)
-    print(degrees)
-    return full_list_calendar_entries
+    return
 
 
 def modify_lodge(table):
@@ -79,42 +70,44 @@ def modify_lodge(table):
     # Loop through the array elements and if the regex matches, the modify the string
     # (i.e., from 'Lodge 001 Hiram' to 'Hiram Lodge No. 1')
     array_idx = 0
-    print(full_list_calendar_entries[array_idx])
+
     for lodge in lodge_array:
         result = rx.match(lodge)
         if result:
             lodge_string = result.group(3) + " " + result.group(1) + " No. " + result.group(2).lstrip("0")
             full_list_calendar_entries[array_idx][0] = lodge_string
         array_idx += 1
-    print(full_list_calendar_entries)
 
 
 def modify_event_title(table):
     # Create an array of the second value in every list in table, the lists of lists
     # of the spreadsheet values.  These are all event descriptions.
     event_array = [item[1] for item in table]
-    print(event_array)
 
     rx = re.compile(r'.*[Dd]egree.*')
 
+    # basically we're looking to see if there is a degree mentioned in the title,
+    # otherwise we're not going to modify it.  If there's an instance of degree,
+    # put the array index into the degree list -- we'll use that later to prepend
+    # the line in the doc with "DEGREE" so that it can easily be identified.
     array_idx = 0
     for event in event_array:
         result = rx.match(event)
         if result is not None:
-            #            print(event, end="|")
             degrees.append(array_idx)
         full_list_calendar_entries[array_idx][1] = event
         array_idx += 1
-    print()
-    print(degrees)
 
 def modify_event_descr(table):
     descr_array = [item[2] for item in table]
-    print(descr_array)
 
     rx = re.compile(r'.*[Dd]egree.*')
     ry = re.compile(r'.*[Dd]inner.*')
 
+    # Similar to the event title, we're looking to see if they mention degree in here.
+    # Also, this is usually where they mention 'dinner', so we will add the array index
+    # to the dinner or degrees list (checking to make sure we don't already have the index
+    # in the degree list from modifying the event title).
     array_idx = 0
     for descr in descr_array:
         if descr:
@@ -130,134 +123,151 @@ def modify_event_descr(table):
 
 
 def modify_event_location(table):
-    print("******* IN modify_even_location *******")
     loc_array = [item[3] for item in table]
-    print(loc_array)
-    print("........................")
-    array_idx = 0
+
     rw = re.compile(r'.*[,]* (.*), (CT USA).*')
     rx = re.compile(r'[\w ]*[,]? (.*), (CT \d{5})[,]*.*')
     ry = re.compile(r'(Lodge) (\d{3}) ([a-zA-Z\-\'\. ]+)')
     rz = re.compile(r'.*, (.*), (CT)[,]* .*')
     ra = re.compile(r'.*, (.*)')
 
-    # loop through the locations.  See what they match, if anything
+    array_idx = 0
+
+    # Look through all the locations and try to extract a town name.  This gets very tricky.  While there are
+    # some locations that are easily parsed, some are more difficult.  We'll maintain two
+    # lists -- one of locations (what we parse) and one of locations exceptions (an array index of what we
+    # could not parse at all.)   In all instances where there is a location field present, we'll put the
+    # town if we can find it into the doc, and the location field too -- the decision of which to use can
+    # be made when editing the doc.
     for loc in loc_array:
-        print("---------------------------------------------------")
-        print(loc)
         if not loc:
-            # there was no location specified in the spreadsheet, so leave it empty in the result
-            print("NO LOC ------")
-            print(table[array_idx][0])
-            print(LodgeTown[table[array_idx][0]])
+            # There was no location specified in the spreadsheet.  However, there is always
+            # a lodge name.  Use the lodge name to grab the lodge location from the LodgeTown dictionary
             full_list_calendar_entries[array_idx][3] = LodgeTown[table[array_idx][0]]
         else:
-            print(loc)
-
-            # start by trying to pull the town out.  BUT, this might be a legit address for a
-            # non-lodge event (say pizza night at a pizza place).  Leave the location
-            # cell alone, but put the possible town into a separate location array
+            # There is a location in the cell. Start by trying to pull the town out.
+            # BUT, this might be a legit address for a non-lodge event (say pizza night at a pizza place).
+            # Leave the location cell alone, but put the possible town into a separate location array
+            #
+            # Start by matching against the CT {zip} regex
             result = rx.match(loc)
             if result:
-                print("Match rx")
-                print(result.group(1))
+                # Leaving in the deubgging print statements in this function.  Might need them in future months.
+                # print("Match rx")
+                # print(result.group(1))
+
+                # This match might have more than just the town.  Run it against another
+                # regex to try to get just the town.  If it fails, use what we just got.
                 result2 = ra.match(result.group(1))
                 if result2:
-                    print(result2.group(1))
+#                    print(result2.group(1))
                     locations[array_idx] = result2.group(1)
                 else:
                     locations[array_idx] = result.group(1)
                 full_list_calendar_entries[array_idx][3] = loc
             else:
-                # See if 'CT' is by itself.
+                # Since CT {zip} didn't work, see if 'CT' is by itself.
                 result2 = rz.match(loc)
                 if result2 is not None:
-                    print("Match rz")
-                    print(result2.group(1))
+#                    print("Match rz")
+#                    print(result2.group(1))
                     locations[array_idx] = result2.group(1)
                     full_list_calendar_entries[array_idx][3] = loc
                 else:
-                    # It might be CT USA, which sometimes shows up
+                    # If not CT {zip} or just CT, it might be CT USA, which sometimes shows up
                     result2 = rw.match(loc)
                     if result2:
-                        print("Match rw")
-                        print(result2.group(1))
+#                        print("Match rw")
+#                        print(result2.group(1))
                         locations[array_idx] = result2.group(1)
                         full_list_calendar_entries[array_idx][3] = loc
                     else:
-                        # it didn't have 'CT' in the location, so see if it is maybe a Lodge 001 Hiram
-                        # situation.  If so, use the lodge/town dictionary to get the address.
-                        # (could probably just use the dictionary when we grab the lodge but this
-                        # is a little more flexible)
+                        # It did not match on any 'CT' so see if the location is maybe a Lodge name
+                        # (i.e., Lodge 001 Hiram).   If so, use the LodgeTown dictionary to get the
+                        # address.
                         result2 = ry.fullmatch(loc)
+                        # Try the fullmatch first, that's easiest
                         if result2:
-                            print("match ry -- fullmatch)")
-                            print(result2)
-                            print(LodgeTown[loc])
+                            # print("match ry -- fullmatch)")
+                            # print(result2)
+                            # print(LodgeTown[loc])
                             full_list_calendar_entries[array_idx][3] = LodgeTown[loc]
                         else:
+                            # Otherwise use search
                             result2 = ry.search(loc)
                             if result2:
-                                print("Match ry -- search")
-                                print(result2)
+                                # print("Match ry -- search")
+                                # print(result2)
                                 lodge = result2.group(1) + " " + result2.group(2) + " " + result2.group(3)
+
+                                # Check that what we got is in the dictionary keys.  There have been
+                                # a couple of instances where a string like "Lodge 263 Center Street"
+                                # matches here and we don't want to blow up
                                 if lodge in LodgeTown.keys():
-                                    print(lodge)
-                                    print(LodgeTown[lodge])
-                                    print(array_idx)
-                                    print(full_list_calendar_entries[array_idx])
+                                    # print(lodge)
+                                    # print(LodgeTown[lodge])
+                                    # print(array_idx)
+                                    # print(full_list_calendar_entries[array_idx])
                                     full_list_calendar_entries[array_idx][3] = LodgeTown[lodge]
                                 else:
-                                    print("********FUCKED UP********" + loc)
+                                    # The "lodge" that we found in the location cell didn't have a key
+                                    # in the dictionary.  There is a small dictionary of known bad
+                                    # locations, see if it is there, and if so put in the correct town
+                                    # from the dictionary.
                                     if loc.strip() in BadLocations:
-                                        print("*!*!*!*!*!*!* BAD LOCATIONS *!*!*!*!*!*!*!*!")
-                                        print(loc)
+                                        # print("*!*!*!*!*!*!* BAD LOCATIONS *!*!*!*!*!*!*!*!")
+                                        # print(loc)
                                         full_list_calendar_entries[array_idx][3] = BadLocations[loc.strip()]
                                     else:
+                                        # We've run out of options here, so write the location into the
+                                        # entries, and put this loc into locations_exceptions for further review.
                                         location_exceptions.append(loc)
                                         full_list_calendar_entries[array_idx][3] = loc
                             else:
-                                print("TRYING BAD LOC")
-                                print(loc)
+                                # search did not rturn up anything.  Try the location against
+                                # entries in the BadLocations dictionary.  If not, do the same as above
+                                # and put the loc inot the entries, and location_exceptions.
+                                # print("TRYING BAD LOC")
+                                # print(loc)
                                 if loc.strip() in BadLocations:
-                                    print("*!*!*!*!*!*!* BAD LOCATIONS *!*!*!*!*!*!*!*!")
-                                    print(loc)
+                                    # print("*!*!*!*!*!*!* BAD LOCATIONS *!*!*!*!*!*!*!*!")
+                                    # print(loc)
                                     full_list_calendar_entries[array_idx][3] = BadLocations[loc.strip()]
                                 else:
                                     location_exceptions.append(loc)
                                     full_list_calendar_entries[array_idx][3] = loc
         array_idx += 1
-        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    print(full_list_calendar_entries)
+
 
 def modify_date(table):
     time_array = [item[4] for item in table]
-    print(time_array)
+
+    # Find the current year.  The style guide says we don't use the year
+    # if it is in the current year, so grab this to compare later.
     curr_yr = datetime.datetime.today().year;
 
     array_idx = 0
     for time in time_array:
-        print("-------------------------------------------")
-        print(array_idx)
-        print(full_list_calendar_entries[array_idx][0])
-        print(time)
         time_str = time.strftime("%a %b. %-d")
+
+        # If the year is greater than the current year, add it to the time_str so it prints.
         if time.year > curr_yr:
-            print(time.year)
             time_str += ", "
             time_str += str(time.year)
-        print(time_str)
         time_str += ", "
+
+        # Style guide is to not print the :00 if it is 00 so do that.
         if time.minute == 00:
             time_str += time.strftime("%-I ")
         else:
             time_str += time.strftime("%-I:%M ")
+
+        # We use a.m. and p.m. so make te appropriate choice.
         if time.hour > 12:
             time_str += "p.m."
         else:
             time_str += "a.m."
-        print(time_str)
-        print(full_list_calendar_entries[array_idx][0])
+
         full_list_calendar_entries[array_idx][4] = time_str
         array_idx += 1
 
