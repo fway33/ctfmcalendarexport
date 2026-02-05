@@ -7,6 +7,9 @@ from ExcelCalendarParser import export_calendar_data
 from ExportDoc import create_word_doc
 #from DataStructs import locations, location_exceptions, degrees, full_list_calendar_entries, dinner
 
-if __name__ == "__main__":
+def main() -> None:
     export_calendar_data()
     create_word_doc()
+
+if __name__ == "__main__":
+    main()

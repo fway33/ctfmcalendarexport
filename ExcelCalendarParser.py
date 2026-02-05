@@ -244,7 +244,7 @@ def modify_date(table):
 
     # Find the current year.  The style guide says we don't use the year
     # if it is in the current year, so grab this to compare later.
-    curr_yr = datetime.datetime.today().year;
+    curr_yr = datetime.datetime.today().year
 
     array_idx = 0
     for time in time_array:
