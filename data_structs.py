@@ -1,6 +1,6 @@
 # These are the data structures that are needed in this whole utility.
 
-# LodgeTown is a diectionary of lodge names (as they come from Google calendar into the spreadsheet
+# LodgeTown is a dictionary of lodge names (as they come from Google calendar into the spreadsheet
 # and their towns.
 LodgeTown = {"Lodge 001 Hiram": "New Haven",
              "Lodge 002 St. John's": "Middletown",
@@ -103,7 +103,8 @@ BadLocations = {"King Hiram Lodge": "Shelton",
                 }
 
 degrees = []
-dinner = []
-locations = []
+has_dinner = []
+lodge_locations = []
 location_exceptions = []
 full_list_calendar_entries = [[]]
+

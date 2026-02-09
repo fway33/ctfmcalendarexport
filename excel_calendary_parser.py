@@ -1,50 +1,46 @@
-# This python file will parse the calendar dump excel spreadsheet
+# This python file will parse the calendar dump Excel spreadsheet
 # and produce a text output suitable for editing.
 import datetime
 import re
-
 import numpy
-import openpyxl
 
-from DataStructs import LodgeTown, BadLocations, locations, location_exceptions, full_list_calendar_entries, dinner, \
+from openpyxl.reader.excel import load_workbook
+from openpyxl import workbook
+from openpyxl.cell.cell import Cell
+
+from DataStructs import LodgeTown, BadLocations, lodge_locations, location_exceptions, full_list_calendar_entries, has_dinner, \
     degrees
 
 
-#
-# Method to find out how many rows in the sheet are populated.
-# This differs (potentially) from max rows
-#
-def get_populated_row_count(ws):
-    number_of_rows = ws.max_row
-
-    while True:
-        if ws.cell(number_of_rows, 1).value is not None:
-            break
-        else:
-            number_of_rows -= 1
-    return number_of_rows
 
 
-def export_calendar_data():
-    # Open the workbook.  There are two worksheets, 'data' and 'calc', we want 'data'
-    wb = openpyxl.load_workbook('CalDump1.xlsx')
-    ws = wb['data']
 
-    # Find out how many rows are populated -- this is different than max rows.
-    rows = get_populated_row_count(ws)
+def export_calendar_data() -> None:
+    """ This function will open the Excel workbook, choose the 'data' sheet,
+    and ignore the 'calc' sheet, then export data and modify it as needed."""
+    workbook = load_workbook('CalDump1.xlsx')
+    worksheet = workbook['data']
+
+    # Find out how many rows are populated -- this is different than max_rows.
+    populated_rows = len([row for row in worksheet if any(cell.value is not None for cell in row)])
+
+    #DBG
+    print(f"Populated rows: {populated_rows}")
 
     # initialize a list of lists, initialized to -1's, to hold our data when transformed
     # also initialize a list to hold locations when there is some doubt
-    for i in range(rows - 1):
+    for i in range(populated_rows - 1):
         full_list_calendar_entries.insert(i, [-1, -1, -1, -1, -1])
-        locations.insert(i, '')
+        lodge_locations.insert(i, '')
 
-    if not full_list_calendar_entries[rows - 1]:
-        full_list_calendar_entries.pop(rows - 1)
+    if not full_list_calendar_entries[populated_rows - 1]:
+        full_list_calendar_entries.pop(populated_rows - 1)
 
     # Set the ending cell identifier...column "E" with the last populated row number
-    end = 'E' + str(rows)
-    table = numpy.array([[cell.value for cell in col] for col in ws['A2':end]])
+    ending_cell = 'E' + str(populated_rows)
+    #DBG
+    print(f"Ending cell: {ending_cell}")
+    table = numpy.array([[cell.value for cell in col] for col in worksheet['A2':ending_cell]])
 
     # The first value in the row is the lodge name.  Need to change that from 'Lodge 001 Hiram'
     # to "Hiram Lodge No. 1".  Run through each column (lodge, event title, event description, location, time)
@@ -55,32 +51,34 @@ def export_calendar_data():
     modify_event_location(table)
     modify_date(table)
 
-    return
+    #return
 
 
-def modify_lodge(table):
-    # Create an array of the first value in every list in table, the lists of lists
-    # of the spreadsheet values.  These are all lodge names.
+def modify_lodge(table: numpy.ndarray) -> None:
+    """ This function creates a list of the first value (lodge name) in every list (row) in the
+    table. The table is a list of lists of the spreadsheet values, and this list is  are
+    all lodge names.  It then modifies those lodge names according to a regex"""
+
     lodge_array = [item[0] for item in table]
 
     # Since we will use it many times, compile the regex for the lodge name as
     # written in the cell (i.e., "Lodge 001 Hiram") and capture the values.
     rx = re.compile(r'(Lodge) (\d{3}) ([a-zA-Z\-\'\. ]+)')
 
-    # Loop through the array elements and if the regex matches, the modify the string
+    # Loop through the list elements and if the regex matches, the modify the string
     # (i.e., from 'Lodge 001 Hiram' to 'Hiram Lodge No. 1')
     array_idx = 0
 
     for lodge in lodge_array:
         result = rx.match(lodge)
         if result:
-            lodge_string = result.group(3) + " " + result.group(1) + " No. " + result.group(2).lstrip("0")
+            lodge_string = f"{result.group(3)} {result.group(1)} No. {result.group(2).lstrip('0')}"
             full_list_calendar_entries[array_idx][0] = lodge_string
         array_idx += 1
 
 
-def modify_event_title(table):
-    # Create an array of the second value in every list in table, the lists of lists
+def modify_event_title(table: numpy.ndarray) -> None:
+    # Create an array of the second value in every list in table, the list of lists
     # of the spreadsheet values.  These are all event descriptions.
     event_array = [item[1] for item in table]
 
@@ -98,8 +96,8 @@ def modify_event_title(table):
         full_list_calendar_entries[array_idx][1] = event
         array_idx += 1
 
-def modify_event_descr(table):
-    descr_array = [item[2] for item in table]
+def modify_event_descr(table: numpy.ndarray) -> None:
+    event_descr_array = [item[2] for item in table]
 
     rx = re.compile(r'.*[Dd]egree.*')
     ry = re.compile(r'.*[Dd]inner.*')
@@ -109,21 +107,21 @@ def modify_event_descr(table):
     # to the dinner or degrees list (checking to make sure we don't already have the index
     # in the degree list from modifying the event title).
     array_idx = 0
-    for descr in descr_array:
-        if descr:
-            result = rx.match(descr)
+    for event_descr in event_descr_array:
+        if event_descr:
+            result = rx.match(event_descr)
             if result:
                 if array_idx not in degrees:
                     degrees.append(array_idx)
-            result2 = ry.search(descr)
+            result2 = ry.search(event_descr)
             if result2:
-                dinner.append(array_idx)
-        full_list_calendar_entries[array_idx][2] = descr
+                has_dinner.append(array_idx)
+        full_list_calendar_entries[array_idx][2] = event_descr
         array_idx += 1
 
 
-def modify_event_location(table):
-    loc_array = [item[3] for item in table]
+def modify_event_location(table:numpy.ndarray) -> None:
+    event_loc_array = [item[3] for item in table]
 
     rw = re.compile(r'.*[,]* (.*), (CT USA).*')
     rx = re.compile(r'[\w ]*[,]? (.*), (CT \d{5})[,]*.*')
@@ -139,8 +137,8 @@ def modify_event_location(table):
     # could not parse at all.)   In all instances where there is a location field present, we'll put the
     # town if we can find it into the doc, and the location field too -- the decision of which to use can
     # be made when editing the doc.
-    for loc in loc_array:
-        if not loc:
+    for event_loc in event_loc_array:
+        if not event_loc:
             # There was no location specified in the spreadsheet.  However, there is always
             # a lodge name.  Use the lodge name to grab the lodge location from the LodgeTown dictionary
             full_list_calendar_entries[array_idx][3] = LodgeTown[table[array_idx][0]]
@@ -150,7 +148,7 @@ def modify_event_location(table):
             # Leave the location cell alone, but put the possible town into a separate location array
             #
             # Start by matching against the CT {zip} regex
-            result = rx.match(loc)
+            result = rx.match(event_loc)
             if result:
                 # Leaving in the deubgging print statements in this function.  Might need them in future months.
                 # print("Match rx")
@@ -161,40 +159,40 @@ def modify_event_location(table):
                 result2 = ra.match(result.group(1))
                 if result2:
 #                    print(result2.group(1))
-                    locations[array_idx] = result2.group(1)
+                    lodge_locations[array_idx] = result2.group(1)
                 else:
-                    locations[array_idx] = result.group(1)
-                full_list_calendar_entries[array_idx][3] = loc
+                    lodge_locations[array_idx] = result.group(1)
+                full_list_calendar_entries[array_idx][3] = event_loc
             else:
                 # Since CT {zip} didn't work, see if 'CT' is by itself.
-                result2 = rz.match(loc)
+                result2 = rz.match(event_loc)
                 if result2 is not None:
 #                    print("Match rz")
 #                    print(result2.group(1))
-                    locations[array_idx] = result2.group(1)
-                    full_list_calendar_entries[array_idx][3] = loc
+                    lodge_locations[array_idx] = result2.group(1)
+                    full_list_calendar_entries[array_idx][3] = event_loc
                 else:
                     # If not CT {zip} or just CT, it might be CT USA, which sometimes shows up
-                    result2 = rw.match(loc)
+                    result2 = rw.match(event_loc)
                     if result2:
 #                        print("Match rw")
 #                        print(result2.group(1))
-                        locations[array_idx] = result2.group(1)
-                        full_list_calendar_entries[array_idx][3] = loc
+                        lodge_locations[array_idx] = result2.group(1)
+                        full_list_calendar_entries[array_idx][3] = event_loc
                     else:
                         # It did not match on any 'CT' so see if the location is maybe a Lodge name
                         # (i.e., Lodge 001 Hiram).   If so, use the LodgeTown dictionary to get the
                         # address.
-                        result2 = ry.fullmatch(loc)
+                        result2 = ry.fullmatch(event_loc)
                         # Try the fullmatch first, that's easiest
                         if result2:
                             # print("match ry -- fullmatch)")
                             # print(result2)
                             # print(LodgeTown[loc])
-                            full_list_calendar_entries[array_idx][3] = LodgeTown[loc]
+                            full_list_calendar_entries[array_idx][3] = LodgeTown[event_loc]
                         else:
                             # Otherwise use search
-                            result2 = ry.search(loc)
+                            result2 = ry.search(event_loc)
                             if result2:
                                 # print("Match ry -- search")
                                 # print(result2)
@@ -214,32 +212,32 @@ def modify_event_location(table):
                                     # in the dictionary.  There is a small dictionary of known bad
                                     # locations, see if it is there, and if so put in the correct town
                                     # from the dictionary.
-                                    if loc.strip() in BadLocations:
+                                    if event_loc.strip() in BadLocations:
                                         # print("*!*!*!*!*!*!* BAD LOCATIONS *!*!*!*!*!*!*!*!")
                                         # print(loc)
-                                        full_list_calendar_entries[array_idx][3] = BadLocations[loc.strip()]
+                                        full_list_calendar_entries[array_idx][3] = BadLocations[event_loc.strip()]
                                     else:
                                         # We've run out of options here, so write the location into the
                                         # entries, and put this loc into locations_exceptions for further review.
-                                        location_exceptions.append(loc)
-                                        full_list_calendar_entries[array_idx][3] = loc
+                                        location_exceptions.append(event_loc)
+                                        full_list_calendar_entries[array_idx][3] = event_loc
                             else:
                                 # search did not rturn up anything.  Try the location against
                                 # entries in the BadLocations dictionary.  If not, do the same as above
                                 # and put the loc inot the entries, and location_exceptions.
                                 # print("TRYING BAD LOC")
                                 # print(loc)
-                                if loc.strip() in BadLocations:
+                                if event_loc.strip() in BadLocations:
                                     # print("*!*!*!*!*!*!* BAD LOCATIONS *!*!*!*!*!*!*!*!")
                                     # print(loc)
                                     full_list_calendar_entries[array_idx][3] = BadLocations[loc.strip()]
                                 else:
-                                    location_exceptions.append(loc)
-                                    full_list_calendar_entries[array_idx][3] = loc
+                                    location_exceptions.append(event_loc)
+                                    full_list_calendar_entries[array_idx][3] = event_loc
         array_idx += 1
 
 
-def modify_date(table):
+def modify_date(table: numpy.ndarray) -> None:
     time_array = [item[4] for item in table]
 
     # Find the current year.  The style guide says we don't use the year

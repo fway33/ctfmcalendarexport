@@ -1,9 +1,10 @@
 from docx import Document
 
-from DataStructs import locations, location_exceptions, degrees, full_list_calendar_entries, dinner
+from DataStructs import lodge_locations, location_exceptions, degrees, full_list_calendar_entries, has_dinner
 
 
-def create_word_doc():
+def create_word_doc() -> None:
+
 
     #create a document object
     document = Document()
@@ -13,7 +14,11 @@ def create_word_doc():
     # We will loop through this and write out lines in to the word doc.  The idea is
     # that most of them will be very close to the final format required.  It will be
     # easy to tweak locations etc.
-    array_idx = 0;
+    array_idx = 0
+
+
+
+#    itemx = [i for i in full_list_calendar_entries if i[0] != -1]
     for item in full_list_calendar_entries:
         if item[0] == -1:
             continue
@@ -26,7 +31,7 @@ def create_word_doc():
         # anything from the dinner or degrees lists.
         if array_idx in degrees:
             p.add_run('*** DEGREE *** ')
-        if array_idx in dinner:
+        if array_idx in has_dinner:
             p.add_run(" DINNER ")
 
         # Now put the time in, in bold:
@@ -40,8 +45,8 @@ def create_word_doc():
 
         # Next up is location.  If there is something in the locations list for this array index
         # print that.  Then put in the full location from the full_list_calendar_entries, delimited by '|'
-        if locations[array_idx]:
-            p.add_run(locations[array_idx])
+        if lodge_locations[array_idx]:
+            p.add_run(lodge_locations[array_idx])
         p.add_run('| ')
         p.add_run(item[3])
         p.add_run(' |')
