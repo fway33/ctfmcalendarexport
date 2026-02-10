@@ -1,28 +1,27 @@
 from docx import Document
 
-from DataStructs import lodge_locations, location_exceptions, degrees, full_list_calendar_entries, has_dinner
+from data_structs import Col, lodge_locations, location_exceptions, degrees, full_list_calendar_entries, has_dinner
 
 
 def create_word_doc() -> None:
-
-
+    """ This will create the base docx file that will be tweaked and then put into the paper"""
     #create a document object
     document = Document()
     document.add_heading("Calendar Events")
 
-    # full_list_calendar_entries holds all the massaged data from the cells.
-    # We will loop through this and write out lines in to the word doc.  The idea is
+    # full_list_calendar_entries, a list of lists,  holds all the massaged data from the cells.
+    # We will loop through this and write out lines in to the Word doc.  The idea is
     # that most of them will be very close to the final format required.  It will be
     # easy to tweak locations etc.
     array_idx = 0
 
+    [add_event_to_doc(document,array_idx, event_row) for event_row in full_list_calendar_entries if event_row[0] != -1]
+
+    # After writing all that, save the document.
+    document.save('scratch.docx')
 
 
-#    itemx = [i for i in full_list_calendar_entries if i[0] != -1]
-    for item in full_list_calendar_entries:
-        if item[0] == -1:
-            continue
-
+def add_event_to_doc(document: Document, array_idx: int, event_row: list[any]) -> None:
         # Each paragraph is one event.
         p = document.add_paragraph()
 
@@ -35,11 +34,11 @@ def create_word_doc() -> None:
             p.add_run(" DINNER ")
 
         # Now put the time in, in bold:
-        p.add_run(item[4]).bold = True
+        p.add_run(event_row[Col.DATE.value]).bold = True
         p.add_run(', ')
 
         # Need the lodge name
-        p.add_run(item[0])
+        p.add_run(event_row[Col.LODGE.value])
         run = p.add_run()
         run.add_break()
 
@@ -48,16 +47,14 @@ def create_word_doc() -> None:
         if lodge_locations[array_idx]:
             p.add_run(lodge_locations[array_idx])
         p.add_run('| ')
-        p.add_run(item[3])
+        p.add_run(event_row[Col.LOCATION.value])
         p.add_run(' |')
 
         # Next up event title
-        p.add_run(item[1])
+        p.add_run(event_row[Col.TITLE.value])
         run.add_break()
         # And finally the event description.
-        p.add_run(item[2])
+        p.add_run(event_row[Col.DESCR.value])
 
         array_idx += 1
 
-    # After writing all that, save the document.
-    document.save('scratch.docx')

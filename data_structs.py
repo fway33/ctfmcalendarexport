@@ -1,8 +1,16 @@
 # These are the data structures that are needed in this whole utility.
 
+from enum import Enum
+class Col(Enum):
+    LODGE = 0
+    TITLE = 1
+    DESCR = 2
+    LOCATION = 3
+    DATE = 4
+
 # LodgeTown is a dictionary of lodge names (as they come from Google calendar into the spreadsheet
 # and their towns.
-LodgeTown = {"Lodge 001 Hiram": "New Haven",
+lodge_town = {"Lodge 001 Hiram": "New Haven",
              "Lodge 002 St. John's": "Middletown",
              "Lodge 003 Fidelity-St. John's": "Fairfield",
              "Lodge 004 Wyllys-St. John's": "West Hartford",
@@ -94,7 +102,7 @@ LodgeTown = {"Lodge 001 Hiram": "New Haven",
 
 # Sometimes the calendar entries are way off but they're consistent for the specific lodge
 # so let's roll an exception dictionary
-BadLocations = {"King Hiram Lodge": "Shelton",
+bad_locations = {"King Hiram Lodge": "Shelton",
                 "Main Lodge Room": "Hamden", # be careful with this one.....
                 "Warren Lodge #51": "Portland",
                 "Fellowcraft Club - Lodge of Instruction": "Portland",
@@ -102,8 +110,12 @@ BadLocations = {"King Hiram Lodge": "Shelton",
                 "Annawon Lodge 263 Center St. WH": "West Haven",
                 }
 
-degrees = []
-has_dinner = []
+# These sequences contain the row numbers if the row contains "degree" or "dinner" information
+# degrees and dinner are sets -- the word may appear in the event title or in the event description.  The row number
+# only needs to be saved once
+degrees = set()
+has_dinner = set()
+
 lodge_locations = []
 location_exceptions = []
 full_list_calendar_entries = [[]]
