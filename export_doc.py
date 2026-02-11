@@ -1,7 +1,9 @@
+import logging
 from docx import Document
 
 from data_structs import Col, lodge_locations, location_exceptions, degrees, full_list_calendar_entries, has_dinner
 
+logger = logging.getLogger(__name__)
 
 def create_word_doc() -> None:
     """ This will create the base docx file that will be tweaked and then put into the paper"""
@@ -19,6 +21,7 @@ def create_word_doc() -> None:
 
     # After writing all that, save the document.
     document.save('scratch.docx')
+    logger.debug(str(location_exceptions))
 
 
 def add_event_to_doc(document: Document, array_idx: int, event_row: list[any]) -> None:

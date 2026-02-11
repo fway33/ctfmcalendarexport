@@ -102,7 +102,7 @@ lodge_town = {"Lodge 001 Hiram": "New Haven",
 
 # Sometimes the calendar entries are way off but they're consistent for the specific lodge
 # so let's roll an exception dictionary
-bad_locations = {"King Hiram Lodge": "Shelton",
+known_bad_locations = {"King Hiram Lodge": "Shelton",
                 "Main Lodge Room": "Hamden", # be careful with this one.....
                 "Warren Lodge #51": "Portland",
                 "Fellowcraft Club - Lodge of Instruction": "Portland",
